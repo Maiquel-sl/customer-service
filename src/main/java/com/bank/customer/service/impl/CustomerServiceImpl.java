@@ -5,7 +5,6 @@ import com.bank.customer.model.CustomerHolder;
 import com.bank.customer.repository.CustomerHolderRepository;
 import com.bank.customer.repository.CustomerRepository;
 import com.bank.customer.service.CustomerService;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -14,11 +13,15 @@ import java.time.LocalDateTime;
 @Service
 public class CustomerServiceImpl implements CustomerService {
 
-    @Autowired
-    private CustomerRepository customerRepository;
+    private final CustomerRepository customerRepository;
 
-    @Autowired
-    private CustomerHolderRepository holderRepository;
+    private final CustomerHolderRepository holderRepository;
+
+    public CustomerServiceImpl(CustomerRepository customerRepository,
+                               CustomerHolderRepository holderRepository) {
+        this.customerRepository = customerRepository;
+        this.holderRepository = holderRepository;
+    }
 
     @Override
     public Flux<Customer> getAllCustomers() {
