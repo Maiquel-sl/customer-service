@@ -1,0 +1,9 @@
+spring:
+  application:
+    name: customer-service
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/bank_customer_db
+
+server:
+  port: 8081
