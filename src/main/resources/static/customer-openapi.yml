@@ -1,0 +1,295 @@
+openapi: 3.1.0
+info:
+  title: Bank Customer Management Microservice (customer-service)
+  description: Reactive Open-API Contract handling Personal and Enterprise banking profile lifecycle and compliance validations.
+  version: 1.0.0
+servers:
+  - url: http://localhost:8080
+    description: API Gateway Entry Point
+  - url: http://localhost:8081
+    description: Direct Customer Service Instance
+paths:
+  /api/customers:
+    get:
+      summary: Retrieve all registered banking customers
+      description: Returns a non-blocking reactive stream containing every customer document across profiles.
+      operationId: getAllCustomers
+      responses:
+        '200':
+          description: A continuous array stream of customer records.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Customer'
+
+    post:
+      summary: Create a new customer profile
+      description: Provisions a Personal or Enterprise banking customer. Enforces domain compliance according to client payload.
+      operationId: createCustomer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Customer'
+      responses:
+        '201':
+          description: Customer profile provisioned and timestamped successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Customer'
+        '400':
+          description: Malformed syntax or invalid parameter criteria provided.
+
+  /api/customers/{id}:
+    get:
+      summary: Find customer profile by identifier
+      operationId: getCustomerById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Target MongoDB Hexadecimal string identifier
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Customer record payload found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Customer'
+        '404':
+          description: No target document matches the requested identifier.
+
+    put:
+      summary: Update existing customer attributes fluently
+      operationId: updateCustomer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Customer'
+      responses:
+        '200':
+          description: Document values updated and modifications timestamped.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Customer'
+        '404':
+          description: Modification failed because target document does not exist.
+
+    delete:
+      summary: Terminate a customer document
+      operationId: deleteCustomer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Customer metadata deleted from the system clusters safely.
+        '404':
+          description: Target customer missing.
+
+  /api/customers/holders:
+    post:
+      summary: Assign corporate account holders and signers
+      description: Binds an enterprise account to real corporate holders and lists authorized operations signatures.
+      operationId: assignHolders
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomerHolder'
+      responses:
+        '201':
+          description: Legal corporate mapping registered successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerHolder'
+
+  /api/customers/holders/account/{accountId}:
+    get:
+      summary: Query authorized managers by Account ID
+      description: Allows account-service to rapidly audit who can withdraw or transact against a business account.
+      operationId: getHoldersByAccount
+      parameters:
+        - name: accountId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Validation rules retrieved for the business account.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerHolder'
+        '404':
+          description: The requested account relation has no registered holders or signers.
+
+components:
+  schemas:
+    Customer:
+      type: object
+      required:
+        - type
+        - status
+      properties:
+        id:
+          type: string
+          example: 65f1a2b3c4d5e6f7a8b9c001
+        type:
+          type: string
+          enum: [PERSONAL, ENTERPRISE]
+          example: PERSONAL
+        status:
+          type: string
+          enum: [ACTIVE, INACTIVE]
+          example: ACTIVE
+        personalInfo:
+          $ref: '#/components/schemas/PersonalInfo'
+        enterpriseInfo:
+          $ref: '#/components/schemas/EnterpriseInfo'
+        signers:
+          type: array
+          items:
+            $ref: '#/components/schemas/Signer'
+        createdAt:
+          type: string
+          format: date-time
+          example: '2026-03-15T10:00:00Z'
+        updatedAt:
+          type: string
+          format: date-time
+          example: '2026-03-15T10:00:00Z'
+
+    PersonalInfo:
+      type: object
+      properties:
+        firstName:
+          type: string
+          example: Juan
+        lastName:
+          type: string
+          example: Pérez
+        documentType:
+          type: string
+          example: DNI
+        documentNumber:
+          type: string
+          example: '45678912'
+        email:
+          type: string
+          format: email
+          example: juan.perez@email.com
+        phone:
+          type: string
+          example: '+51999888777'
+
+    EnterpriseInfo:
+      type: object
+      properties:
+        businessName:
+          type: string
+          example: Tech Solutions S.A.C.
+        commercialName:
+          type: string
+          example: TechSolutions
+        taxId:
+          type: string
+          example: RUC20123456789
+        email:
+          type: string
+          format: email
+          example: contacto@techsolutions.com
+        phone:
+          type: string
+          example: '+5114445555'
+
+    Signer:
+      type: object
+      properties:
+        documentType:
+          type: string
+          example: DNI
+        documentNumber:
+          type: string
+          example: '11223344'
+        fullName:
+          type: string
+          example: Carlos Gómez
+        role:
+          type: string
+          example: APODERADO
+
+    CustomerHolder:
+      type: object
+      required:
+        - accountId
+        - customerId
+      properties:
+        id:
+          type: string
+          example: 65f1a2b3c4d5e6f7a8b9c003
+        accountId:
+          type: string
+          example: ACC-9988776655
+        customerId:
+          type: string
+          example: 65f1a2b3c4d5e6f7a8b9c002
+        holders:
+          type: array
+          items:
+            $ref: '#/components/schemas/HolderDetail'
+        authorizedSigners:
+          type: array
+          items:
+            $ref: '#/components/schemas/SignerDetail'
+        assignedAt:
+          type: string
+          format: date-time
+          example: '2026-03-15T11:00:00Z'
+
+    HolderDetail:
+      type: object
+      properties:
+        documentType:
+          type: string
+          example: DNI
+        documentNumber:
+          type: string
+          example: '77665544'
+        fullName:
+          type: string
+          example: Ana Martínez
+
+    SignerDetail:
+      type: object
+      properties:
+        documentType:
+          type: string
+          example: DNI
+        documentNumber:
+          type: string
+          example: '11223344'
+        fullName:
+          type: string
+          example: Carlos Gómez
