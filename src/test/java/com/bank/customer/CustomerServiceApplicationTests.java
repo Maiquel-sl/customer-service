@@ -4,7 +4,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
-@SpringBootTest
+@SpringBootTest(properties = {
+    "spring.data.mongodb.uri=mongodb://localhost:27017/customer-service-db"
+})
 class CustomerServiceApplicationTests {
 
     @Test
