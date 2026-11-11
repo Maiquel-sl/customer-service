@@ -111,11 +111,11 @@ public class CustomerServiceImpl implements CustomerService {
 
     @SuppressWarnings("unused")
     private <T> Mono<T> genericMonoFallback(Throwable ex) {
-        return ReactiveFallbackHandler.handleMonoFallback("TransactionService", ex);
+        return ReactiveFallbackHandler.handleMonoFallback("CustomerService", ex);
     }
 
     @SuppressWarnings("unused")
     private <T> Flux<T> genericFluxFallback(Throwable ex) {
-        return ReactiveFallbackHandler.handleFluxFallback("TransactionService", ex);
+        return ReactiveFallbackHandler.handleFluxFallback("CustomerService", ex);
     }
 }
