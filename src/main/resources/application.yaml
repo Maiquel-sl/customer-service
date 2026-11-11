@@ -3,6 +3,17 @@ spring:
     name: customer-service
   mongodb:
     uri: ${MONGODB_URI:mongodb://localhost:27017/customer-service-db}
+  cloud:
+    function:
+      definition: customerEventProducer
+    stream:
+      kafka:
+        binder:
+          brokers: ${KAFKA_BROKERS:localhost:9092}
+      bindings:
+        customerEventProducer-out-0:
+          destination: customer-events
+          content-type: application/json
 
 springdoc:
   api-docs:

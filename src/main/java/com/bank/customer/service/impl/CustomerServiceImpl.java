@@ -1,5 +1,7 @@
 package com.bank.customer.service.impl;
 
+import com.bank.customer.events.CustomerEvent;
+import com.bank.customer.messaging.CustomerEventPublisher;
 import com.bank.customer.model.Customer;
 import com.bank.customer.model.CustomerHolder;
 import com.bank.customer.repository.CustomerHolderRepository;
@@ -17,10 +19,14 @@ public class CustomerServiceImpl implements CustomerService {
 
     private final CustomerHolderRepository holderRepository;
 
+    private final CustomerEventPublisher eventPublisher;
+
     public CustomerServiceImpl(CustomerRepository customerRepository,
-                               CustomerHolderRepository holderRepository) {
+                               CustomerHolderRepository holderRepository,
+                               CustomerEventPublisher eventPublisher) {
         this.customerRepository = customerRepository;
         this.holderRepository = holderRepository;
+        this.eventPublisher = eventPublisher;
     }
 
     @Override
@@ -37,7 +43,14 @@ public class CustomerServiceImpl implements CustomerService {
     public Mono<Customer> createCustomer(Customer customer) {
         customer.setCreatedAt(LocalDateTime.now());
         customer.setUpdatedAt(LocalDateTime.now());
-        return customerRepository.save(customer);
+        return customerRepository.save(customer)
+        .doOnSuccess(saved -> eventPublisher.publish(new CustomerEvent(
+                    "CREATED",
+                    saved.getId(),
+                    saved.getType(),
+                    saved.getStatus(),
+                    saved.getCreatedAt()
+            )));
     }
 
     @Override
@@ -49,7 +62,14 @@ public class CustomerServiceImpl implements CustomerService {
                     existingCustomer.setEnterpriseInfo(customerDetails.getEnterpriseInfo());
                     existingCustomer.setSigners(customerDetails.getSigners());
                     existingCustomer.setUpdatedAt(LocalDateTime.now());
-                    return customerRepository.save(existingCustomer);
+                    return customerRepository.save(existingCustomer)
+                    .doOnSuccess(updated -> eventPublisher.publish(new CustomerEvent(
+                            "UPDATED",
+                            updated.getId(),
+                            updated.getType(),
+                            updated.getStatus(),
+                            updated.getUpdatedAt()
+                    )));
                 });
     }
 
