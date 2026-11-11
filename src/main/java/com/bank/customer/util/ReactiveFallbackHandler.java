@@ -1,4 +1,4 @@
-package com.bank.customer.util; // Ajustar paquete según el microservicio (account, credit, transaction)
+package com.bank.customer.util;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
