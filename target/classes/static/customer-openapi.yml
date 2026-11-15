@@ -1,22 +1,23 @@
 openapi: 3.1.0
 info:
-  title: Bank Customer Management Microservice (customer-service)
-  description: Reactive Open-API Contract handling Personal and Enterprise banking profile lifecycle and compliance validations.
-  version: 1.0.0
+  title: Customer Management Microservice (customer-service)
+  description: Reactive Open-API Contract managing Personal (Standard, VIP) and Enterprise (Standard, PYME) customers, legal signers, and account holders. Publishes synchronization events to Apache Kafka.
+  version: 2.0.0
 servers:
   - url: http://localhost:8080
     description: API Gateway Entry Point
   - url: http://localhost:8081
     description: Direct Customer Service Instance
+
 paths:
   /api/customers:
     get:
-      summary: Retrieve all registered banking customers
-      description: Returns a non-blocking reactive stream containing every customer document across profiles.
+      summary: Retrieve all registered customers
+      description: Returns a reactive stream of all Personal and Enterprise customers with their assigned profiles (STANDARD, VIP, PYME).
       operationId: getAllCustomers
       responses:
         '200':
-          description: A continuous array stream of customer records.
+          description: List of customers retrieved successfully.
           content:
             application/json:
               schema:
@@ -25,8 +26,8 @@ paths:
                   $ref: '#/components/schemas/Customer'
 
     post:
-      summary: Create a new customer profile
-      description: Provisions a Personal or Enterprise banking customer. Enforces domain compliance according to client payload.
+      summary: Register a new customer (Personal VIP/Standard or Enterprise PYME/Standard)
+      description: Creates a new customer in MongoDB and publishes a CustomerEvent to Kafka to synchronize local read replicas in account-service and credit-service.
       operationId: createCustomer
       requestBody:
         required: true
@@ -34,39 +35,70 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/Customer'
+            examples:
+              personalVip:
+                summary: Personal VIP Customer
+                value:
+                  type: PERSONAL
+                  profile: VIP
+                  status: ACTIVE
+                  personalInfo:
+                    firstName: Ana
+                    lastName: Gómez
+                    documentType: DNI
+                    documentNumber: "87654321"
+                    email: ana.vip@bank.com
+                    phone: "999111222"
+              enterprisePyme:
+                summary: Enterprise PYME Customer
+                value:
+                  type: ENTERPRISE
+                  profile: PYME
+                  status: ACTIVE
+                  enterpriseInfo:
+                    businessName: Tech Solutions S.A.C.
+                    taxId: "20554433221"
+                    address: Av. Javier Prado 450
+                    corporateEmail: contacto@tech.pe
       responses:
         '201':
-          description: Customer profile provisioned and timestamped successfully.
+          description: Customer created successfully and event published to Kafka.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Customer'
         '400':
-          description: Malformed syntax or invalid parameter criteria provided.
+          description: Invalid type/profile combination (e.g., PERSONAL with PYME or ENTERPRISE with VIP).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /api/customers/{id}:
     get:
-      summary: Find customer profile by identifier
+      summary: Find customer by hexadecimal ID
       operationId: getCustomerById
       parameters:
         - name: id
           in: path
           required: true
-          description: Target MongoDB Hexadecimal string identifier
+          description: MongoDB ObjectId string (24 hex characters)
           schema:
             type: string
+            example: 65f1a2b3c4d5e6f7a8b9c001
       responses:
         '200':
-          description: Customer record payload found.
+          description: Customer details retrieved.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Customer'
         '404':
-          description: No target document matches the requested identifier.
+          description: Customer not found.
 
     put:
-      summary: Update existing customer attributes fluently
+      summary: Update an existing customer and profile
+      description: Updates customer information or profile (e.g., upgrading STANDARD to VIP/PYME) and emits an UPDATED event to Kafka.
       operationId: updateCustomer
       parameters:
         - name: id
@@ -74,6 +106,7 @@ paths:
           required: true
           schema:
             type: string
+            example: 65f1a2b3c4d5e6f7a8b9c001
       requestBody:
         required: true
         content:
@@ -82,16 +115,22 @@ paths:
               $ref: '#/components/schemas/Customer'
       responses:
         '200':
-          description: Document values updated and modifications timestamped.
+          description: Customer updated successfully.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Customer'
+        '400':
+          description: Invalid profile rule or payload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
-          description: Modification failed because target document does not exist.
+          description: Customer ID does not exist.
 
     delete:
-      summary: Terminate a customer document
+      summary: Delete a customer by ID
       operationId: deleteCustomer
       parameters:
         - name: id
@@ -99,16 +138,16 @@ paths:
           required: true
           schema:
             type: string
+            example: 65f1a2b3c4d5e6f7a8b9c001
       responses:
         '204':
-          description: Customer metadata deleted from the system clusters safely.
+          description: Customer deleted successfully.
         '404':
-          description: Target customer missing.
+          description: Customer ID does not exist.
 
   /api/customers/holders:
     post:
-      summary: Assign corporate account holders and signers
-      description: Binds an enterprise account to real corporate holders and lists authorized operations signatures.
+      summary: Assign account holders and authorized signers to an enterprise account
       operationId: assignHolders
       requestBody:
         required: true
@@ -118,16 +157,21 @@ paths:
               $ref: '#/components/schemas/CustomerHolder'
       responses:
         '201':
-          description: Legal corporate mapping registered successfully.
+          description: Holders assigned successfully.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/CustomerHolder'
+        '400':
+          description: Invalid holder data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /api/customers/holders/account/{accountId}:
     get:
-      summary: Query authorized managers by Account ID
-      description: Allows account-service to rapidly audit who can withdraw or transact against a business account.
+      summary: Retrieve assigned holders for a specific bank account ID
       operationId: getHoldersByAccount
       parameters:
         - name: accountId
@@ -135,15 +179,16 @@ paths:
           required: true
           schema:
             type: string
+            example: 65f1a2b3c4d5e6f7a8b9c101
       responses:
         '200':
-          description: Validation rules retrieved for the business account.
+          description: Account holders retrieved.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/CustomerHolder'
         '404':
-          description: The requested account relation has no registered holders or signers.
+          description: No holders found for the given account ID.
 
 components:
   schemas:
@@ -160,6 +205,12 @@ components:
           type: string
           enum: [PERSONAL, ENTERPRISE]
           example: PERSONAL
+        profile:
+          type: string
+          enum: [STANDARD, VIP, PYME]
+          default: STANDARD
+          description: VIP applies only to PERSONAL; PYME applies only to ENTERPRISE.
+          example: VIP
         status:
           type: string
           enum: [ACTIVE, INACTIVE]
@@ -175,34 +226,33 @@ components:
         createdAt:
           type: string
           format: date-time
-          example: '2026-03-15T10:00:00Z'
         updatedAt:
           type: string
           format: date-time
-          example: '2026-03-15T10:00:00Z'
 
     PersonalInfo:
       type: object
       properties:
         firstName:
           type: string
-          example: Juan
+          example: Ana
         lastName:
           type: string
-          example: Pérez
+          example: Gómez
         documentType:
           type: string
+          enum: [DNI, PASSPORT, CE]
           example: DNI
         documentNumber:
           type: string
-          example: '45678912'
+          example: "87654321"
         email:
           type: string
           format: email
-          example: juan.perez@email.com
+          example: ana.vip@bank.com
         phone:
           type: string
-          example: '+51999888777'
+          example: "999111222"
 
     EnterpriseInfo:
       type: object
@@ -210,86 +260,65 @@ components:
         businessName:
           type: string
           example: Tech Solutions S.A.C.
-        commercialName:
-          type: string
-          example: TechSolutions
         taxId:
           type: string
-          example: RUC20123456789
-        email:
+          example: "20554433221"
+        address:
+          type: string
+          example: Av. Javier Prado 450
+        corporateEmail:
           type: string
           format: email
-          example: contacto@techsolutions.com
-        phone:
-          type: string
-          example: '+5114445555'
+          example: contacto@tech.pe
 
     Signer:
       type: object
       properties:
+        fullName:
+          type: string
+          example: Carlos Ruiz
         documentType:
           type: string
           example: DNI
         documentNumber:
           type: string
-          example: '11223344'
-        fullName:
-          type: string
-          example: Carlos Gómez
-        role:
-          type: string
-          example: APODERADO
+          example: "44556677"
+        isPrimary:
+          type: boolean
+          example: true
 
     CustomerHolder:
       type: object
       required:
         - accountId
         - customerId
+        - holders
       properties:
         id:
           type: string
-          example: 65f1a2b3c4d5e6f7a8b9c003
         accountId:
           type: string
-          example: ACC-9988776655
+          example: 65f1a2b3c4d5e6f7a8b9c101
         customerId:
           type: string
           example: 65f1a2b3c4d5e6f7a8b9c002
         holders:
           type: array
           items:
-            $ref: '#/components/schemas/HolderDetail'
-        authorizedSigners:
-          type: array
-          items:
-            $ref: '#/components/schemas/SignerDetail'
-        assignedAt:
+            $ref: '#/components/schemas/Signer'
+
+    ErrorResponse:
+      type: object
+      properties:
+        timestamp:
           type: string
           format: date-time
-          example: '2026-03-15T11:00:00Z'
-
-    HolderDetail:
-      type: object
-      properties:
-        documentType:
+        status:
+          type: integer
+          example: 400
+        error:
           type: string
-          example: DNI
-        documentNumber:
+          example: Bad Request
+        message:
           type: string
-          example: '77665544'
-        fullName:
-          type: string
-          example: Ana Martínez
-
-    SignerDetail:
-      type: object
-      properties:
-        documentType:
-          type: string
-          example: DNI
-        documentNumber:
-          type: string
-          example: '11223344'
-        fullName:
-          type: string
-          example: Carlos Gómez
+          example: Un cliente PERSONAL solo admite perfil STANDARD o VIP

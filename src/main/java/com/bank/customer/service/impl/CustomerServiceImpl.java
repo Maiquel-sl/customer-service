@@ -23,8 +23,8 @@ public class CustomerServiceImpl implements CustomerService {
     private final CustomerEventPublisher eventPublisher;
 
     public CustomerServiceImpl(CustomerRepository customerRepository,
-                               CustomerHolderRepository holderRepository,
-                               CustomerEventPublisher eventPublisher) {
+            CustomerHolderRepository holderRepository,
+            CustomerEventPublisher eventPublisher) {
         this.customerRepository = customerRepository;
         this.holderRepository = holderRepository;
         this.eventPublisher = eventPublisher;
@@ -48,17 +48,30 @@ public class CustomerServiceImpl implements CustomerService {
     @CircuitBreaker(name = "bankServiceCB", fallbackMethod = "genericMonoFallback")
     @TimeLimiter(name = "bankServiceCB")
     public Mono<Customer> createCustomer(Customer customer) {
+
+        String profile = (customer.getProfile() == null || customer.getProfile().isBlank())
+                ? "STANDARD"
+                : customer.getProfile().toUpperCase().trim();
+        customer.setProfile(profile);
+
+        if ("PERSONAL".equals(customer.getType()) && !"STANDARD".equals(profile) && !"VIP".equals(profile)) {
+            return Mono.error(new IllegalArgumentException("Un cliente PERSONAL solo admite perfil STANDARD o VIP"));
+        }
+        if ("ENTERPRISE".equals(customer.getType()) && !"STANDARD".equals(profile) && !"PYME".equals(profile)) {
+            return Mono.error(new IllegalArgumentException("Un cliente ENTERPRISE solo admite perfil STANDARD o PYME"));
+        }
+
         customer.setCreatedAt(LocalDateTime.now());
         customer.setUpdatedAt(LocalDateTime.now());
         // Flujo reactivo original (si tarda más de 2s, salta al fallback)
         return customerRepository.save(customer)
-        .doOnSuccess(saved -> eventPublisher.publish(new CustomerEvent(
-                    "CREATED",
-                    saved.getId(),
-                    saved.getType(),
-                    saved.getStatus(),
-                    saved.getCreatedAt()
-            )));
+                .doOnSuccess(saved -> eventPublisher.publish(new CustomerEvent(
+                        "CREATED",
+                        saved.getId(),
+                        saved.getType(),
+                        profile,
+                        saved.getStatus(),
+                        saved.getCreatedAt())));
     }
 
     @Override
@@ -67,19 +80,36 @@ public class CustomerServiceImpl implements CustomerService {
     public Mono<Customer> updateCustomer(String id, Customer customerDetails) {
         return customerRepository.findById(id)
                 .flatMap(existingCustomer -> {
+
+                    String profile = (existingCustomer.getProfile() == null || existingCustomer.getProfile().isBlank())
+                            ? "STANDARD"
+                            : existingCustomer.getProfile().toUpperCase().trim();
+                    existingCustomer.setProfile(profile);
+
+                    if ("PERSONAL".equals(existingCustomer.getType()) && !"STANDARD".equals(profile)
+                            && !"VIP".equals(profile)) {
+                        return Mono.error(
+                                new IllegalArgumentException("Un cliente PERSONAL solo admite perfil STANDARD o VIP"));
+                    }
+                    if ("ENTERPRISE".equals(existingCustomer.getType()) && !"STANDARD".equals(profile)
+                            && !"PYME".equals(profile)) {
+                        return Mono.error(new IllegalArgumentException(
+                                "Un cliente ENTERPRISE solo admite perfil STANDARD o PYME"));
+                    }
+
                     existingCustomer.setStatus(customerDetails.getStatus());
                     existingCustomer.setPersonalInfo(customerDetails.getPersonalInfo());
                     existingCustomer.setEnterpriseInfo(customerDetails.getEnterpriseInfo());
                     existingCustomer.setSigners(customerDetails.getSigners());
                     existingCustomer.setUpdatedAt(LocalDateTime.now());
                     return customerRepository.save(existingCustomer)
-                    .doOnSuccess(updated -> eventPublisher.publish(new CustomerEvent(
-                            "UPDATED",
-                            updated.getId(),
-                            updated.getType(),
-                            updated.getStatus(),
-                            updated.getUpdatedAt()
-                    )));
+                            .doOnSuccess(updated -> eventPublisher.publish(new CustomerEvent(
+                                    "UPDATED",
+                                    updated.getId(),
+                                    updated.getType(),
+                                    profile,
+                                    updated.getStatus(),
+                                    updated.getUpdatedAt())));
                 });
     }
 
